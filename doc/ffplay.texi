@@ -113,6 +113,11 @@ syntax.
 You can specify this parameter multiple times and cycle through the specified
 filtergraphs along with the show modes by pressing the key @key{w}.
 
+@item -AAAA
+Draw a filled black circle in the center of the video. The circle diameter is
+the smaller of the video width and height. The circle is applied after any
+video filters specified with @option{-vf}.
+
 @item -af @var{filtergraph}
 @var{filtergraph} is a description of the filtergraph to apply to
 the input audio.

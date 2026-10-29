@@ -398,6 +398,7 @@ static const char **vfilters_list = NULL;
 static int nb_vfilters = 0;
 static char *afilters = NULL;
 static int autorotate = 1;
+static int draw_circle;
 static int find_stream_info = 1;
 static int filter_nbthreads = 0;
 static int enable_vulkan = 0;
@@ -2027,11 +2028,30 @@ static int get_video_frame(VideoState *is, AVFrame *frame)
 }
 
 static int configure_filtergraph(AVFilterGraph *graph, const char *filtergraph,
-                                 AVFilterContext *source_ctx, AVFilterContext *sink_ctx)
+                                 AVFilterContext *source_ctx, AVFilterContext *sink_ctx,
+                                 int add_circle)
 {
-    int ret, i;
-    int nb_filters = graph->nb_filters;
+    static const char circle_args[] =
+        "r='if(lte((X-(W-1)/2)^2+(Y-(H-1)/2)^2,(min(W,H)/2)^2),0,r(X,Y))':"
+        "g='if(lte((X-(W-1)/2)^2+(Y-(H-1)/2)^2,(min(W,H)/2)^2),0,g(X,Y))':"
+        "b='if(lte((X-(W-1)/2)^2+(Y-(H-1)/2)^2,(min(W,H)/2)^2),0,b(X,Y))'";
+    int ret, i, nb_filters;
     AVFilterInOut *outputs = NULL, *inputs = NULL;
+    AVFilterContext *graph_sink = sink_ctx;
+
+    if (add_circle) {
+        AVFilterContext *circle_filter;
+
+        ret = avfilter_graph_create_filter(&circle_filter, avfilter_get_by_name("geq"),
+                                           "ffplay_circle", circle_args, NULL, graph);
+        if (ret < 0)
+            goto fail;
+        if ((ret = avfilter_link(circle_filter, 0, sink_ctx, 0)) < 0)
+            goto fail;
+        graph_sink = circle_filter;
+    }
+
+    nb_filters = graph->nb_filters;
 
     if (filtergraph) {
         outputs = avfilter_inout_alloc();
@@ -2047,14 +2067,14 @@ static int configure_filtergraph(AVFilterGraph *graph, const char *filtergraph,
         outputs->next       = NULL;
 
         inputs->name        = av_strdup("out");
-        inputs->filter_ctx  = sink_ctx;
+        inputs->filter_ctx  = graph_sink;
         inputs->pad_idx     = 0;
         inputs->next        = NULL;
 
         if ((ret = avfilter_graph_parse_ptr(graph, filtergraph, &inputs, &outputs, NULL)) < 0)
             goto fail;
     } else {
-        if ((ret = avfilter_link(source_ctx, 0, sink_ctx, 0)) < 0)
+        if ((ret = avfilter_link(source_ctx, 0, graph_sink, 0)) < 0)
             goto fail;
     }
 
@@ -2210,7 +2230,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
         }
     }
 
-    if ((ret = configure_filtergraph(graph, vfilters, filt_src, last_filter)) < 0)
+    if ((ret = configure_filtergraph(graph, vfilters, filt_src, last_filter, draw_circle)) < 0)
         goto fail;
 
     is->in_video_filter  = filt_src;
@@ -2279,7 +2299,7 @@ static int configure_audio_filters(VideoState *is, const char *afilters, int for
     if (ret < 0)
         goto end;
 
-    if ((ret = configure_filtergraph(is->agraph, afilters, filt_asrc, filt_asink)) < 0)
+    if ((ret = configure_filtergraph(is->agraph, afilters, filt_asrc, filt_asink, 0)) < 0)
         goto end;
 
     is->in_audio_filter  = filt_asrc;
@@ -4462,6 +4482,7 @@ static const OptionDef options[] = {
     { "left",               OPT_TYPE_INT,    OPT_EXPERT, { &screen_left }, "set the x position for the left of the window", "x pos" },
     { "top",                OPT_TYPE_INT,    OPT_EXPERT, { &screen_top }, "set the y position for the top of the window", "y pos" },
     { "vf",                 OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT, { .func_arg = opt_add_vfilter }, "set video filters", "filter_graph" },
+    { "AAAA",               OPT_TYPE_BOOL,            0, { &draw_circle }, "draw a filled black circle in the center of the video" },
     { "af",                 OPT_TYPE_STRING,          0, { &afilters }, "set audio filters", "filter_graph" },
     { "rdftspeed",          OPT_TYPE_INT, OPT_AUDIO | OPT_EXPERT, { &rdftspeed }, "rdft speed", "msecs" },
     { "showmode",           OPT_TYPE_FUNC, OPT_FUNC_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT, 3 = phase)", "mode" },
