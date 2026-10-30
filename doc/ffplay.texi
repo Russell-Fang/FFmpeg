@@ -118,6 +118,11 @@ Draw a filled black circle in the center of the video. The circle diameter is
 the smaller of the video width and height. The circle is applied after any
 video filters specified with @option{-vf}.
 
+@item -BBBB
+Draw a filled white circle in the center of the video. The circle diameter is
+the smaller of the video width and height. The circle is applied after any
+video filters specified with @option{-vf}.
+
 @item -af @var{filtergraph}
 @var{filtergraph} is a description of the filtergraph to apply to
 the input audio.
